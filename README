@@ -6,3 +6,5 @@ Intructions:
 
 Stategy based on:
 http://en.wikipedia.org/wiki/Tic_tac_toe#Strategy
+
+Run test.py to run through all possible permutations of games.
