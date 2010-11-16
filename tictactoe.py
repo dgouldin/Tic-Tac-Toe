@@ -220,7 +220,27 @@ def empty_side(board):
             return match
     return None
 
+def opening(board):
+    if get_positions_matching(board, BOT):
+        return None # opening only applies to the first play
+    if not get_positions_matching(board, OPPONENT):
+        return empty_corner(board)
+    else:
+        corners = numpy.array([
+            [True,  False, True ],
+            [False, False, False],
+            [True,  False, True ],
+        ])
+        if numpy.any(board[corners] == OPPONENT):
+            return center(board)
+
+        x,y = BOARD_SIZE
+        if board[x/2, y/2] == OPPONENT:
+            return empty_corner(board)
+        return center(board)
+
 best_moves = [
+    opening,
     win,
     block,
     fork(BOT),
