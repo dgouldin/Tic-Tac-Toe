@@ -249,33 +249,52 @@ def apply_move(board, position, player):
     board[position_to_array(position)] = player
     return board
 
+def bot_turn(board, labels):
+    print "My move"
+    return apply_move(board, pick_best_move(board), BOT)
+
+def opponent_turn(board, labels):
+    print 'You are "%s"' % labels[OPPONENT]
+    print render_board(board, labels)
+    while 1:
+        try:
+            position = input('Your move: ')
+            return apply_move(board, position, OPPONENT)
+        except TicTacNo, e:
+            print "Tic Tac NO! (%s)" % e
+
+turns = {
+    BOT: bot_turn,
+    OPPONENT: opponent_turn,
+}
+
 if __name__ == "__main__":
-    labels = {
-        BOT: 'x',
-        OPPONENT: 'o',
-    }
+    players = [BOT, OPPONENT]
+    random.shuffle(players)
+
+    if players[0] == BOT:
+        print "I go first. You will surely lose."
+        labels = {
+            BOT: 'x',
+            OPPONENT: 'o',
+        }
+    else:
+        print "You go first ... this time. (It does not matter. You will be crushed.)"
+        labels = {
+            BOT: 'o',
+            OPPONENT: 'x',
+        }
+        
+
+    current_player = players[0]
     board = NEW_BOARD.copy()
     winner = None
-
     while 1:
-        print render_board(board, labels)
-        position = None
-        while position is None:
-            try:
-                position = input('Your move: ')
-                board = apply_move(board, position, OPPONENT)
-            except TicTacNo, e:
-                position = None
-                print "Tic Tac NO! (%s)" % e
+        board = turns[current_player](board, labels)
         winner = find_winner(board)
         if winner is not None:
             break
-
-        print "My move"
-        board = apply_move(board, pick_best_move(board), BOT)
-        winner = find_winner(board)
-        if winner is not None:
-            break
+        current_player = players[(players.index(current_player) + 1) % len(players)]
 
     print "Final board:"
     print render_board(board, labels)
