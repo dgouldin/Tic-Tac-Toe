@@ -90,7 +90,7 @@ def one_to_win(player):
     def _one_to_win(board):
         def match_row(row_num, row):
             if len(row[row==player]) == 2 and len(row[row==UNPLAYED]) == 1:
-                return (numpy.array([row_num]), numpy.where(row==UNPLAYED))
+                return (numpy.array([row_num]), numpy.where(row==UNPLAYED)[0])
             return None
 
         def match_board(board):
@@ -113,9 +113,39 @@ def one_to_win(player):
 win = one_to_win(BOT)
 block = one_to_win(OPPONENT)
 
+def fork(board):
+    forks = [
+        numpy.array([
+            [True,  False, False],
+            [False, False, False],
+            [True,  False, True ],
+        ]),
+        numpy.array([
+            [False, False, False],
+            [True,  False, False],
+            [True,  False, True ],
+        ]),
+    ]
+
+    def match_board(board):
+        for fork in forks:
+            row = board[fork]
+            if len(row[row==BOT]) == 2 and len(row[row==UNPLAYED]) == 1:
+                positions = map(lambda x,y: (numpy.array([x]), numpy.array([y])),
+                    *numpy.where(fork==True))
+                return positions[numpy.where(row==UNPLAYED)[0][0]]
+        return None
+
+    for i in range(1, 4):
+        match = try_rotated(match_board, board, num_rotations=i)
+        if match:
+            return match
+    return None
+
 best_moves = [
     win,
     block,
+    fork
 ]
 
 def pick_best_move(board):
