@@ -16,6 +16,9 @@ BOARD_TEMPLATE = """
 class TicTacNo(Exception):
     pass
 
+
+# Utilities
+
 def render_board(board, labels):
     x,y = BOARD_SIZE
     board_str = numpy.array([''] * x * y).reshape(BOARD_SIZE)
@@ -82,17 +85,14 @@ def find_winner(board):
         return None
 
     winner = match_board(board) or try_rotated(match_board, board)
-
-    if winner is not None:
-        if winner == BOT:
-            print "I win! I am invincible!"
-        else:
-            print "You win! I am invinc"
-            1/0
+    if winner:
+        return winner
     if not numpy.any(board==UNPLAYED):
-        print "I did not lose! I am invincible!"
-        winner = 0
-    return winner
+        return 0
+    return None
+
+
+#Strategies
 
 def one_to_win(player):
     def _one_to_win(board):
@@ -256,7 +256,6 @@ def pick_best_move(board):
     for move in best_moves:
         position = move(board)
         if position is not None:
-            print "Used %s" % move
             return position
 
     # Well, I'm all out of ideas.
@@ -269,26 +268,37 @@ def apply_move(board, position, player):
     board[position_to_array(position)] = player
     return board
 
-def bot_turn(board, labels):
-    print "My move"
-    return apply_move(board, pick_best_move(board), BOT)
 
-def opponent_turn(board, labels):
-    print 'You are "%s"' % labels[OPPONENT]
-    print render_board(board, labels)
-    while 1:
-        try:
-            position = input('Your move: ')
-            return apply_move(board, position, OPPONENT)
-        except TicTacNo, e:
-            print "Tic Tac NO! (%s)" % e
+# Actual gameplay
 
-turns = {
-    BOT: bot_turn,
-    OPPONENT: opponent_turn,
-}
+def bot_turn(move_func):
+    def _bot_turn(board, labels):
+        print "My move"
+        return move_func(board)
+    return _bot_turn
 
-if __name__ == "__main__":
+def opponent_turn(move_func):
+    def _opponent_turn(board, labels):
+        print 'You are "%s"' % labels[OPPONENT]
+        print render_board(board, labels)
+        return move_func(board)
+    return _opponent_turn
+
+def play(opponent_move_func=None):
+    def default_opponent_move_func(board):
+        while 1:
+            try:
+                position = input('Your move: ')
+                return apply_move(board, position, OPPONENT)
+            except TicTacNo, e:
+                print "Tic Tac NO! (%s)" % e
+    opponent_move_func = opponent_move_func or default_opponent_move_func
+
+    turns = {
+        BOT: bot_turn(lambda board: apply_move(board, pick_best_move(board), BOT)),
+        OPPONENT: opponent_turn(opponent_move_func),
+    }
+
     players = [BOT, OPPONENT]
     random.shuffle(players)
 
@@ -304,7 +314,6 @@ if __name__ == "__main__":
             BOT: 'o',
             OPPONENT: 'x',
         }
-        
 
     current_player = players[0]
     board = NEW_BOARD.copy()
@@ -313,8 +322,19 @@ if __name__ == "__main__":
         board = turns[current_player](board, labels)
         winner = find_winner(board)
         if winner is not None:
+            if winner == BOT:
+                print "I win! I am invincible!"
+            elif winner == OPPONENT:
+                print "You win! I am invinc"
+                1/0
+            else:
+                print "I did not lose! I am invincible!"
             break
         current_player = players[(players.index(current_player) + 1) % len(players)]
 
     print "Final board:"
     print render_board(board, labels)
+    return winner
+
+if __name__ == "__main__":
+    play()
