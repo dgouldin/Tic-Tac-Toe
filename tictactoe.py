@@ -37,11 +37,19 @@ def position_to_array(position):
         return (numpy.array([position / x]), numpy.array([position % x]))
     return position
 
+def get_positions_matching(array, match_item):
+    return map(lambda x,y: (numpy.array([x]), numpy.array([y])),
+        *numpy.where(array==match_item))
+
 def is_unplayed(board, position):
     position = position_to_array(position)
     return board[position][0] == UNPLAYED
 
 def try_rotated(selector_func, board, num_rotations=1):
+    if num_rotations == 0:
+        # fast-path no rotations
+        return selector_func(board)
+
     num_rotations = (4 + num_rotations) % 4
     match = selector_func(numpy.rot90(board, num_rotations))
 
@@ -113,30 +121,100 @@ def one_to_win(player):
 win = one_to_win(BOT)
 block = one_to_win(OPPONENT)
 
-def fork(board):
-    forks = [
-        numpy.array([
-            [True,  False, False],
-            [False, False, False],
-            [True,  False, True ],
-        ]),
-        numpy.array([
-            [False, False, False],
-            [True,  False, False],
-            [True,  False, True ],
-        ]),
-    ]
+def fork(player):
+    def _fork(board):
+        forks = [
+            numpy.array([
+                [True,  False, False],
+                [False, False, False],
+                [True,  False, True ],
+            ]),
+            numpy.array([
+                [False, False, False],
+                [True,  False, False],
+                [True,  False, True ],
+            ]),
+        ]
+
+        def match_board(board):
+            for fork in forks:
+                row = board[fork]
+                if len(row[row==player]) == 2 and len(row[row==UNPLAYED]) == 1:
+                    positions = get_positions_matching(fork, True)
+                    return positions[numpy.where(row==UNPLAYED)[0][0]]
+            return None
+
+        for i in range(4):
+            match = try_rotated(match_board, board, num_rotations=i)
+            if match:
+                return match
+        return None
+    return _fork
+
+def block_fork(board):
+    opponent_fork = fork(OPPONENT)(board)
+    if opponent_fork: # uh oh, you're about to get forked!
+        unplayed_positions = get_positions_matching(board, UNPLAYED)
+        for position in unplayed_positions:
+            # hypothetically play each unplayed position
+            # to see if it results in a forced block
+            # thus avoiding the impending fork
+            temp_board = board.copy()
+            temp_board[position] = BOT
+            block_position = one_to_win(BOT)(temp_board)
+            if block_position and block_position != opponent_fork:
+                return position
+
+        # no way we can force a block, fork them up!
+        return opponent_fork
+    return None
+
+def center(board):
+    x,y = BOARD_SIZE
+    if board[x/2, y/2] == UNPLAYED:
+        return (numpy.array([x/2]), numpy.array([y/2]))
+    return None
+
+def opposite_corner(board):
+    opposite_corners = numpy.array([
+        [False, True,  False],
+        [True,  False, False],
+        [False, False, False],
+    ])
 
     def match_board(board):
-        for fork in forks:
-            row = board[fork]
-            if len(row[row==BOT]) == 2 and len(row[row==UNPLAYED]) == 1:
-                positions = map(lambda x,y: (numpy.array([x]), numpy.array([y])),
-                    *numpy.where(fork==True))
+        if board[0,0] == OPPONENT:
+            row = board[opposite_corners]
+            if len(row[row==UNPLAYED]):
+                positions = get_positions_matching(opposite_corners, True)
                 return positions[numpy.where(row==UNPLAYED)[0][0]]
         return None
 
-    for i in range(1, 4):
+    for i in range(4):
+        match = try_rotated(match_board, board, num_rotations=i)
+        if match:
+            return match
+    return None
+
+def empty_corner(board):
+    
+    def match_board(board):
+        if board[0,0] == UNPLAYED:
+            return (numpy.array([0]), numpy.array([0]))
+
+    for i in range(4):
+        match = try_rotated(match_board, board, num_rotations=i)
+        if match:
+            return match
+    return None
+
+def empty_side(board):
+
+    def match_board(board):
+        if board[0,1] == UNPLAYED:
+            return (numpy.array([0]), numpy.array([1]))
+
+    for i in range(4):
         match = try_rotated(match_board, board, num_rotations=i)
         if match:
             return match
@@ -145,7 +223,12 @@ def fork(board):
 best_moves = [
     win,
     block,
-    fork
+    fork(BOT),
+    block_fork,
+    center,
+    opposite_corner,
+    empty_corner,
+    empty_side,
 ]
 
 def pick_best_move(board):
@@ -153,11 +236,11 @@ def pick_best_move(board):
     for move in best_moves:
         position = move(board)
         if position is not None:
+            print "Used %s" % move
             return position
 
     # Well, I'm all out of ideas.
-    unplayed_positions = map(lambda x,y: (numpy.array([x]), numpy.array([y])),
-        *numpy.where(board==UNPLAYED))
+    unplayed_positions = get_positions_matching(board, UNPLAYED)
     return random.choice(unplayed_positions)
 
 def apply_move(board, position, player):
