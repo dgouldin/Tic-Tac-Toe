@@ -56,14 +56,22 @@ def try_rotated(selector_func, board, num_rotations=1):
     num_rotations = (4 + num_rotations) % 4
     match = selector_func(numpy.rot90(board, num_rotations))
 
-    if isinstance(match, int):
-        return match # match is a scalar, not a position
-
-    if match:
+    def get_original_match(match):
         rotated_board = NEW_BOARD.copy()
         rotated_board[match] = 1
         original_board = numpy.rot90(rotated_board, 4 - num_rotations)
         return numpy.where(original_board == 1)
+    
+    if isinstance(match, int):
+        # match is a scalar, not a position
+        return match 
+
+    if isinstance(match, list):
+        # match is a list, transform and return all matches
+        return [get_original_match(m) for m in match]
+            
+    if match:
+        return get_original_match(match)
     return None
 
 def find_winner(board):
@@ -121,41 +129,71 @@ def win_by_player(player):
 win = win_by_player(BOT)
 block = win_by_player(OPPONENT)
 
+forks = [
+    numpy.array([
+        [ 1, -1, -1],
+        [ 0, -1, -1],
+        [ 1,  0,  1],
+    ]),
+    numpy.array([
+        [ 0, -1, -1],
+        [ 1, -1, -1],
+        [ 1,  0,  1],
+    ]),
+    numpy.array([
+        [ 1, -1, -1],
+        [ 0, -1, -1],
+        [ 1,  1,  0],
+    ]),
+    numpy.array([
+        [ 1,  0,  1],
+        [-1, -1,  1],
+        [-1, -1,  0],
+    ]),
+    numpy.array([
+        [ 1,  1,  0],
+        [ 1, -1, -1],
+        [ 0, -1, -1],
+    ]),
+    numpy.array([
+        [-1, -1,  1],
+        [-1,  1,  0],
+        [ 0, -1,  1],
+    ]),
+]
+
+def get_all_forks(player, board):
+    def match_board(board):
+        board_forks = []
+        for i, fork in enumerate(forks):
+            unplayed_required = set(board[numpy.where(fork==0)]) == set([UNPLAYED])
+            played_array = board[numpy.where(fork==1)]
+            played_required = len(numpy.where(played_array==player)[0]) == 2 \
+                and len(numpy.where(played_array==UNPLAYED)[0]) == 1
+            if unplayed_required and played_required:
+                positions = get_positions_matching(fork, 1)
+                board_forks.extend([positions[w[0]] for w in numpy.where(played_array==UNPLAYED)])
+        return board_forks
+
+    all_forks = []
+    for i in range(4):
+        all_forks.extend(try_rotated(match_board, board, num_rotations=i))
+    return all_forks
+
 def fork_by_player(player):
     def _fork(board):
-        forks = [
-            numpy.array([
-                [True,  False, False],
-                [False, False, False],
-                [True,  False, True ],
-            ]),
-            numpy.array([
-                [False, False, False],
-                [True,  False, False],
-                [True,  False, True ],
-            ]),
-        ]
 
-        def match_board(board):
-            for fork in forks:
-                row = board[fork]
-                if len(row[row==player]) == 2 and len(row[row==UNPLAYED]) == 1:
-                    positions = get_positions_matching(fork, True)
-                    return positions[numpy.where(row==UNPLAYED)[0][0]]
-            return None
-
-        for i in range(4):
-            match = try_rotated(match_board, board, num_rotations=i)
-            if match:
-                return match
+        all_forks = get_all_forks(player, board)
+        if all_forks:
+            return all_forks[0]
         return None
     return _fork
 
 fork = fork_by_player(BOT)
 
 def block_fork(board):
-    opponent_fork = fork_by_player(OPPONENT)(board)
-    if opponent_fork: # uh oh, you're about to get forked!
+    opponent_forks = get_all_forks(OPPONENT, board)
+    if opponent_forks: # uh oh, you're about to get forked!
         unplayed_positions = get_positions_matching(board, UNPLAYED)
         for position in unplayed_positions:
             # hypothetically play each unplayed position
@@ -164,11 +202,18 @@ def block_fork(board):
             temp_board = board.copy()
             temp_board[position] = BOT
             block_position = win_by_player(BOT)(temp_board)
-            if block_position and block_position != opponent_fork:
+            if block_position and block_position not in opponent_forks:
                 return position
 
-        # no way we can force a block, fork them up!
-        return opponent_fork
+        # no way we can force a block, choose the best fork to fork them up!
+        for opponent_fork in opponent_forks:
+            temp_board = board.copy()
+            temp_board[opponent_fork] = BOT
+            if not get_all_forks(OPPONENT, temp_board):
+                return opponent_fork
+
+        # you're totally screwed, give up man
+        return opponent_forks[0]
     return None
 
 def center(board):
@@ -286,7 +331,7 @@ def opponent_turn(move_func):
         return move_func(board)
     return _opponent_turn
 
-def play(opponent_move_func=None):
+def play(opponent_move_func=None, first_player=None):
     def default_opponent_move_func(board):
         while 1:
             try:
@@ -302,7 +347,10 @@ def play(opponent_move_func=None):
     }
 
     players = [BOT, OPPONENT]
-    random.shuffle(players)
+    if first_player is not None:
+        players.sort(key=lambda player: player == first_player and -1 or 1)
+    else:
+        random.shuffle(players)
 
     if players[0] == BOT:
         print "I go first. You will surely lose."
