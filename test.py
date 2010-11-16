@@ -1,8 +1,13 @@
+"""
+Test script which walks a decision tree until all possible
+game permutations are exhausted.
+"""
 from collections import defaultdict
 
 import numpy
 
-from tictactoe import UNPLAYED, BOT, OPPONENT, BOARD_SIZE, apply_move, get_positions_by_item, play
+from tictactoe import UNPLAYED, BOT, OPPONENT, BOARD_SIZE, \
+    apply_move, get_positions_by_item, play
 
 def array_to_position(array):
     if isinstance(array, tuple):
@@ -34,14 +39,17 @@ def opponent_move_func(board):
     current_branch = current_branch['branches'][array_to_position(position)]
     return board
 
-for first_player in (OPPONENT, BOT):
-    root = {
-        'branches': {},
-        'exhausted': False,
-    }
-    while not root['exhausted']:
-        current_branch = root
-        winner = play(opponent_move_func, first_player=first_player)
-        current_branch['exhausted'] = True
-        if winner == OPPONENT:
-            import pdb; pdb.set_trace();
+def play_all_games():
+    global current_branch
+    for first_player in (OPPONENT, BOT):
+        root = {
+            'branches': {},
+            'exhausted': False,
+        }
+        while not root['exhausted']:
+            current_branch = root
+            winner = play(opponent_move_func, first_player=first_player)
+            current_branch['exhausted'] = True
+
+if __name__ == "__main__":
+    play_all_games()
