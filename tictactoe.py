@@ -1,3 +1,4 @@
+import itertools
 import numpy
 import random
 
@@ -40,9 +41,11 @@ def position_to_array(position):
         return (numpy.array([position / x]), numpy.array([position % x]))
     return position
 
-def get_positions_matching(array, match_item):
+def get_positions_by_item(array, item, criteria=None):
+    criteria = criteria or (lambda array,item: array == item)
+
     return map(lambda x,y: (numpy.array([x]), numpy.array([y])),
-        *numpy.where(array==match_item))
+        *numpy.where(criteria(array, item)))
 
 def is_unplayed(board, position):
     position = position_to_array(position)
@@ -102,65 +105,82 @@ def find_winner(board):
 
 #Strategies
 
+def get_all_wins(player, board):
+    def match_row(row_num, row):
+        matches = []
+        if len(row[row==player]) == 2 and len(row[row==UNPLAYED]) == 1:
+            matches.append((numpy.array([row_num]), numpy.where(row==UNPLAYED)[0]))
+        return matches
+
+    def match_board(board):
+        matches = []
+        # search rows for a match
+        for i, row in enumerate(board):
+            matches.extend(match_row(i, row))
+
+        # no match found in rows, try the diagonal
+        diagonal_matches = match_row(-1, board.diagonal())
+        matches.extend([(index, index) for _, index in diagonal_matches])
+        return matches
+
+    matches = []
+    matches.extend(match_board(board))
+    matches.extend(try_rotated(match_board, board))
+    return matches
+
 def win_by_player(player):
     def _win(board):
-        def match_row(row_num, row):
-            if len(row[row==player]) == 2 and len(row[row==UNPLAYED]) == 1:
-                return (numpy.array([row_num]), numpy.where(row==UNPLAYED)[0])
+        matches = get_all_wins(player, board)
+        if matches:
+            return matches[0]
+        else:
             return None
-
-        def match_board(board):
-            # search rows for a match
-            for i, row in enumerate(board):
-                match = match_row(i, row)
-                if match:
-                    return match
-
-            # no match found in rows, try the diagonal
-            match = match_row(-1, board.diagonal())
-            if match:
-                _, index = match
-                return (index, index)
-            return None
-
-        return match_board(board) or try_rotated(match_board, board)
     return _win
 
 win = win_by_player(BOT)
 block = win_by_player(OPPONENT)
 
-forks = [
-    numpy.array([
-        [ 1, -1, -1],
-        [ 0, -1, -1],
-        [ 1,  0,  1],
-    ]),
-    numpy.array([
-        [ 0, -1, -1],
-        [ 1, -1, -1],
-        [ 1,  0,  1],
-    ]),
-    numpy.array([
-        [ 1, -1, -1],
-        [ 0, -1, -1],
-        [ 1,  1,  0],
-    ]),
-    numpy.array([
-        [ 1,  0,  1],
-        [-1, -1,  1],
-        [-1, -1,  0],
-    ]),
-    numpy.array([
-        [ 1,  1,  0],
-        [ 1, -1, -1],
-        [ 0, -1, -1],
-    ]),
-    numpy.array([
-        [-1, -1,  1],
-        [-1,  1,  0],
-        [ 0, -1,  1],
-    ]),
-]
+def generate_forks():
+    def prefork_is_possible(permutation, num_wins):
+        is_possible = False
+        for sub_permutation in itertools.permutations(permutation, 2):
+            sub_board = NEW_BOARD.copy()
+            for p in sub_permutation:
+                sub_board[position_to_array(p)] = 1
+            # if more premature blocks are open than wins required for the fork
+            # it's not a fork (remember, a fork needs 2 wins to work)
+            if len(get_all_wins(1, sub_board)) <= (num_wins - 2):
+                is_possible = True
+                break
+        return is_possible
+
+    forks = []
+    for permutation in itertools.permutations(range(1,10), 3):
+        board = NEW_BOARD.copy()
+        for p in permutation:
+            board[position_to_array(p)] = 1
+        wins = get_all_wins(1, board)
+        num_wins = len(wins)
+        if num_wins > 1 and prefork_is_possible(permutation, num_wins):
+            # ok it's a fork, populate all the possible 2-win combinations
+            for win_combination in itertools.combinations(wins, 2):
+                _board = board.copy()
+                for position in get_positions_by_item(_board, 0):
+                    if position not in win_combination:
+                        _board[position] = -1
+
+                # now compare it to existing forks in all rotations
+                is_unique = True
+                for i in range(4):
+                    rotated = numpy.rot90(_board, i)
+                    if any([numpy.all(numpy.equal(rotated, fork)) for fork in forks]):
+                        is_unique = False
+                        break
+                if is_unique:
+                    forks.append(_board)
+    return forks
+
+forks = generate_forks()
 
 def get_all_forks(player, board):
     def match_board(board):
@@ -171,7 +191,7 @@ def get_all_forks(player, board):
             played_required = len(numpy.where(played_array==player)[0]) == 2 \
                 and len(numpy.where(played_array==UNPLAYED)[0]) == 1
             if unplayed_required and played_required:
-                positions = get_positions_matching(fork, 1)
+                positions = get_positions_by_item(fork, 1)
                 board_forks.extend([positions[w[0]] for w in numpy.where(played_array==UNPLAYED)])
         return board_forks
 
@@ -194,7 +214,7 @@ fork = fork_by_player(BOT)
 def block_fork(board):
     opponent_forks = get_all_forks(OPPONENT, board)
     if opponent_forks: # uh oh, you're about to get forked!
-        unplayed_positions = get_positions_matching(board, UNPLAYED)
+        unplayed_positions = get_positions_by_item(board, UNPLAYED)
         for position in unplayed_positions:
             # hypothetically play each unplayed position
             # to see if it results in a forced block
@@ -233,7 +253,7 @@ def opposite_corner(board):
         if board[0,0] == OPPONENT:
             row = board[opposite_corners]
             if len(row[row==UNPLAYED]):
-                positions = get_positions_matching(opposite_corners, True)
+                positions = get_positions_by_item(opposite_corners, True)
                 return positions[numpy.where(row==UNPLAYED)[0][0]]
         return None
 
@@ -268,9 +288,9 @@ def empty_side(board):
     return None
 
 def opening(board):
-    if get_positions_matching(board, BOT):
+    if get_positions_by_item(board, BOT):
         return None # opening only applies to the first play
-    if not get_positions_matching(board, OPPONENT):
+    if not get_positions_by_item(board, OPPONENT):
         return empty_corner(board)
     else:
         corners = numpy.array([
@@ -306,7 +326,7 @@ def pick_best_move(board):
             return position
 
     # Well, I'm all out of ideas.
-    unplayed_positions = get_positions_matching(board, UNPLAYED)
+    unplayed_positions = get_positions_by_item(board, UNPLAYED)
     return random.choice(unplayed_positions)
 
 def apply_move(board, position, player):

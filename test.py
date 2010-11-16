@@ -2,7 +2,7 @@ from collections import defaultdict
 
 import numpy
 
-from tictactoe import UNPLAYED, BOT, OPPONENT, BOARD_SIZE, apply_move, get_positions_matching, play
+from tictactoe import UNPLAYED, BOT, OPPONENT, BOARD_SIZE, apply_move, get_positions_by_item, play
 
 def array_to_position(array):
     if isinstance(array, tuple):
@@ -25,7 +25,7 @@ def get_first_available(branch, available_positions):
 current_branch = None
 def opponent_move_func(board):
     global current_branch
-    available_positions = get_positions_matching(board, UNPLAYED)
+    available_positions = get_positions_by_item(board, UNPLAYED)
     position = get_first_available(current_branch, available_positions)
     if position is None:
         current_branch['exhausted'] = True
