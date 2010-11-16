@@ -94,8 +94,8 @@ def find_winner(board):
 
 #Strategies
 
-def one_to_win(player):
-    def _one_to_win(board):
+def win_by_player(player):
+    def _win(board):
         def match_row(row_num, row):
             if len(row[row==player]) == 2 and len(row[row==UNPLAYED]) == 1:
                 return (numpy.array([row_num]), numpy.where(row==UNPLAYED)[0])
@@ -116,12 +116,12 @@ def one_to_win(player):
             return None
 
         return match_board(board) or try_rotated(match_board, board)
-    return _one_to_win
+    return _win
 
-win = one_to_win(BOT)
-block = one_to_win(OPPONENT)
+win = win_by_player(BOT)
+block = win_by_player(OPPONENT)
 
-def fork(player):
+def fork_by_player(player):
     def _fork(board):
         forks = [
             numpy.array([
@@ -151,8 +151,10 @@ def fork(player):
         return None
     return _fork
 
+fork = fork_by_player(BOT)
+
 def block_fork(board):
-    opponent_fork = fork(OPPONENT)(board)
+    opponent_fork = fork_by_player(OPPONENT)(board)
     if opponent_fork: # uh oh, you're about to get forked!
         unplayed_positions = get_positions_matching(board, UNPLAYED)
         for position in unplayed_positions:
@@ -161,7 +163,7 @@ def block_fork(board):
             # thus avoiding the impending fork
             temp_board = board.copy()
             temp_board[position] = BOT
-            block_position = one_to_win(BOT)(temp_board)
+            block_position = win_by_player(BOT)(temp_board)
             if block_position and block_position != opponent_fork:
                 return position
 
@@ -243,7 +245,7 @@ best_moves = [
     opening,
     win,
     block,
-    fork(BOT),
+    fork,
     block_fork,
     center,
     opposite_corner,
