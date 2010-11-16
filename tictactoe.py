@@ -355,7 +355,12 @@ def play(opponent_move_func=None, first_player=None):
     def default_opponent_move_func(board):
         while 1:
             try:
-                position = input('Your move: ')
+                try:
+                    position = int(raw_input('Your move: '))
+                except ValueError:
+                    raise TicTacNo("That's not even a number!")
+                if not isinstance(position, int) or not (1 <= position <= 9):
+                    raise TicTacNo("Invalid position value.")
                 return apply_move(board, position, OPPONENT)
             except TicTacNo, e:
                 print "Tic Tac NO! (%s)" % e
